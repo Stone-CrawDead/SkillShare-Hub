@@ -1,0 +1,247 @@
+
+
+/* =============================================================
+   Organização:
+   01. Scroll Reveal
+   02. Header Dinâmico
+   03. Validação do Formulário
+   04. Init
+============================================================= */
+
+function initScrollReveal() {
+  const CLASSE_VISIVEL = 'sr--visivel';
+
+  // Seleciona todos os elementos marcados para reveal
+  const elementos = document.querySelectorAll('.sr');
+
+  if (!elementos.length) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add(CLASSE_VISIVEL);
+          // Para de observar após revelar (animação só acontece uma vez)
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    {
+      threshold: 0.12,      // 12% do elemento visível já dispara
+      rootMargin: '0px 0px -40px 0px'  // antecipa um pouco antes da borda
+    }
+  );
+
+  elementos.forEach((el, i) => {
+    // Delay escalonado para grupos (filhos do mesmo pai)
+    const irmaoIndex = Array.from(el.parentElement.children).indexOf(el);
+    el.style.transitionDelay = `${irmaoIndex * 80}ms`;
+    observer.observe(el);
+  });
+}
+
+
+/* ─────────────────────────────────────────────*/
+
+function initHeaderDinamico() {
+  const header = document.querySelector('.header');
+  if (!header) return;
+
+  const LIMITE_SCROLL = 60; // px a partir de quando o efeito ativa
+
+  let ultimoScroll = 0;
+  let ticking = false;
+
+  function atualizarHeader() {
+    const scrollAtual = window.scrollY;
+
+    if (scrollAtual > LIMITE_SCROLL) {
+      header.classList.add('header--scrolled');
+    } else {
+      header.classList.remove('header--scrolled');
+    }
+
+    ultimoScroll = scrollAtual;
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(atualizarHeader);
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
+
+/* ─────────────────────────────────────────────*/
+
+function initFormulario() {
+  const form = document.querySelector('.form');
+  if (!form) return;
+
+  // ── Regras de validação por campo ──────────────────
+  const regras = {
+    nome:    { min: 3,   mensagem: 'Por favor, insira seu nome completo.' },
+    email:   { regex: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, mensagem: 'Insira um e-mail válido.' },
+    ensina:  { min: 2,   mensagem: 'Conte o que você pode ensinar.' },
+    aprende: { min: 2,   mensagem: 'Conte o que você quer aprender.' },
+  };
+
+  // ── Valida um campo individualmente ────────────────
+  function validarCampo(input) {
+    const id = input.id;
+    const valor = input.value.trim();
+    const regra = regras[id];
+    if (!regra) return true;
+
+    let valido = true;
+
+    if (regra.regex) {
+      valido = regra.regex.test(valor);
+    } else if (regra.min) {
+      valido = valor.length >= regra.min;
+    }
+
+    mostrarEstadoCampo(input, valido, regra.mensagem);
+    return valido;
+  }
+
+  // ── Aplica classe de estado e mensagem no campo ────
+  function mostrarEstadoCampo(input, valido, mensagemErro) {
+    // Remove estados anteriores
+    input.classList.remove('form__input--erro', 'form__input--ok');
+
+    // Remove mensagem de erro anterior
+    const erroAnterior = input.parentElement.querySelector('.form__erro');
+    if (erroAnterior) erroAnterior.remove();
+
+    if (valido) {
+      input.classList.add('form__input--ok');
+    } else {
+      input.classList.add('form__input--erro');
+
+      // Cria e injeta mensagem de erro
+      const span = document.createElement('span');
+      span.className = 'form__erro';
+      span.textContent = mensagemErro;
+      input.parentElement.appendChild(span);
+    }
+  }
+
+  // ── Validação em tempo real (ao sair do campo) ─────
+  Object.keys(regras).forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    // Valida ao perder o foco
+    input.addEventListener('blur', () => validarCampo(input));
+
+    // Limpa o erro enquanto o usuário digita
+    input.addEventListener('input', () => {
+      if (input.classList.contains('form__input--erro')) {
+        input.classList.remove('form__input--erro');
+        const erro = input.parentElement.querySelector('.form__erro');
+        if (erro) erro.remove();
+      }
+    });
+  });
+
+  // ── Submissão do formulário ────────────────────────
+  const btnSubmit = form.querySelector('button[type="submit"]');
+  if (btnSubmit) {
+    btnSubmit.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      let tudoValido = true;
+
+      Object.keys(regras).forEach((id) => {
+        const input = document.getElementById(id);
+        if (input && !validarCampo(input)) {
+          tudoValido = false;
+        }
+      });
+
+      if (tudoValido) {
+        const nome = document.getElementById('nome').value.trim();
+        mostrarModalSucesso(nome);
+        form.reset();
+
+        // Remove ícones de ok após reset
+        form.querySelectorAll('.form__input--ok').forEach((el) => {
+          el.classList.remove('form__input--ok');
+        });
+      } else {
+        // Foca o primeiro campo com erro
+        const primeiroErro = form.querySelector('.form__input--erro');
+        if (primeiroErro) primeiroErro.focus();
+      }
+    });
+  }
+
+  // ── Modal de sucesso (sem back-end) ───────────────
+  function mostrarModalSucesso(nome) {
+    // Evita duplicatas
+    const existente = document.querySelector('.modal-overlay');
+    if (existente) existente.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+        <div class="modal__icone">🌱</div>
+        <h3 class="modal__titulo" id="modal-titulo">Boa, ${nome.split(' ')[0]}!</h3>
+        <p class="modal__texto">
+          Seu interesse foi registrado. Quando a plataforma entrar no ar,
+          você será um dos primeiros a saber — e já terá seu perfil esperando por você.
+        </p>
+        <p class="modal__detalhe">
+          Enquanto isso, pense em mais habilidades que você poderia compartilhar. ✦
+        </p>
+        <button class="btn btn--primary modal__fechar">Entendido!</button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+
+    // Foca o botão de fechar para acessibilidade
+    requestAnimationFrame(() => {
+      overlay.classList.add('modal-overlay--visivel');
+      overlay.querySelector('.modal__fechar').focus();
+    });
+
+    // Fecha ao clicar no botão
+    overlay.querySelector('.modal__fechar').addEventListener('click', fecharModal);
+
+    // Fecha ao clicar fora do modal
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) fecharModal();
+    });
+
+    // Fecha com Escape
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') {
+        fecharModal();
+        document.removeEventListener('keydown', handler);
+      }
+    });
+
+    function fecharModal() {
+      overlay.classList.remove('modal-overlay--visivel');
+      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+      document.body.style.overflow = '';
+    }
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+   04. INIT — Inicializa tudo após o DOM carregar
+───────────────────────────────────────────── */
+
+document.addEventListener('DOMContentLoaded', () => {
+  initScrollReveal();
+  initHeaderDinamico();
+  initFormulario();
+});
